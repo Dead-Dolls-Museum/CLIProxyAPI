@@ -1443,7 +1443,7 @@ func geminiToAntigravity(modelName string, payload []byte, projectID string) []b
 	template, _ = sjson.Set(template, "userAgent", "antigravity")
 	template, _ = sjson.Set(template, "requestType", requestType)
 	if requestType == "web_search" {
-		if modelInfo := registry.LookupModelInfo(resolvedModel); modelInfo != nil && modelInfo.Thinking != nil {
+		if modelInfo := registry.LookupModelInfo(resolvedModel, "antigravity"); modelInfo != nil && modelInfo.Thinking != nil {
 			budgetResult := gjson.GetBytes([]byte(template), "request.generationConfig.thinkingConfig.thinkingBudget")
 			if budgetResult.Exists() {
 				budget := int(budgetResult.Int())
