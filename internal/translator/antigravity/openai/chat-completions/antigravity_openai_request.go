@@ -365,13 +365,14 @@ func ConvertOpenAIRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 			}
 			if t.Get("type").String() == "web_search" {
 				hasWebSearchTool = true
+				webSearchToolNode := []byte(`{}`)
 				var errSet error
-				toolNode, errSet = sjson.SetRawBytes(toolNode, "googleSearch", []byte(`{}`))
+				webSearchToolNode, errSet = sjson.SetRawBytes(webSearchToolNode, "googleSearch", []byte(`{}`))
 				if errSet != nil {
 					log.Warnf("Failed to set googleSearch tool for web_search: %v", errSet)
 					continue
 				}
-				hasTool = true
+				googleSearchNodes = append(googleSearchNodes, webSearchToolNode)
 			}
 			if gs := t.Get("google_search"); gs.Exists() {
 				googleToolNode := []byte(`{}`)
