@@ -6,6 +6,7 @@
 package claude
 
 import (
+	"bytes"
 	"strings"
 
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/cache"
@@ -36,7 +37,8 @@ import (
 //   - []byte: The transformed request data in Gemini CLI API format
 func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ bool) []byte {
 	enableThoughtTranslate := true
-	rawJSON := inputRawJSON
+	rawJSON := bytes.Clone(inputRawJSON)
+	hasWebSearchTool := false
 
 	// system instruction
 	systemInstructionJSON := ""
@@ -319,6 +321,10 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 		toolsResults := toolsResult.Array()
 		for i := 0; i < len(toolsResults); i++ {
 			toolResult := toolsResults[i]
+			if toolResult.Get("type").String() == "web_search" || toolResult.Get("name").String() == "web_search" {
+				hasWebSearchTool = true
+				continue
+			}
 			inputSchemaResult := toolResult.Get("input_schema")
 			if inputSchemaResult.Exists() && inputSchemaResult.IsObject() {
 				// Sanitize the input schema for Antigravity API compatibility
@@ -336,6 +342,13 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 			}
 		}
 	}
+	if hasWebSearchTool {
+		if toolsJSON == "" {
+			toolsJSON = `[{"googleSearch":{}}]`
+		} else {
+			toolsJSON, _ = sjson.SetRaw(toolsJSON, "0.googleSearch", `{}`)
+		}
+	}
 
 	// Build output Gemini CLI request JSON
 	out := `{"model":"","request":{"contents":[]}}`
@@ -344,8 +357,7 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 	// Inject interleaved thinking hint when both tools and thinking are active
 	hasTools := toolDeclCount > 0
 	thinkingResult := gjson.GetBytes(rawJSON, "thinking")
-	thinkingType := thinkingResult.Get("type").String()
-	hasThinking := thinkingResult.Exists() && thinkingResult.IsObject() && (thinkingType == "enabled" || thinkingType == "adaptive")
+	hasThinking := thinkingResult.Exists() && thinkingResult.IsObject() && thinkingResult.Get("type").String() == "enabled"
 	isClaudeThinking := util.IsClaudeThinkingModel(modelName)
 
 	if hasTools && hasThinking && isClaudeThinking {
@@ -375,21 +387,18 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 	if toolDeclCount > 0 {
 		out, _ = sjson.SetRaw(out, "request.tools", toolsJSON)
 	}
+	if hasWebSearchTool && toolDeclCount == 0 {
+		out, _ = sjson.SetRaw(out, "request.tools", toolsJSON)
+	}
 
 	// Map Anthropic thinking -> Gemini thinkingBudget/include_thoughts when type==enabled
 	if t := gjson.GetBytes(rawJSON, "thinking"); enableThoughtTranslate && t.Exists() && t.IsObject() {
-		switch t.Get("type").String() {
-		case "enabled":
+		if t.Get("type").String() == "enabled" {
 			if b := t.Get("budget_tokens"); b.Exists() && b.Type == gjson.Number {
 				budget := int(b.Int())
 				out, _ = sjson.Set(out, "request.generationConfig.thinkingConfig.thinkingBudget", budget)
 				out, _ = sjson.Set(out, "request.generationConfig.thinkingConfig.includeThoughts", true)
 			}
-		case "adaptive":
-			// Keep adaptive as a high level sentinel; ApplyThinking resolves it
-			// to model-specific max capability.
-			out, _ = sjson.Set(out, "request.generationConfig.thinkingConfig.thinkingLevel", "high")
-			out, _ = sjson.Set(out, "request.generationConfig.thinkingConfig.includeThoughts", true)
 		}
 	}
 	if v := gjson.GetBytes(rawJSON, "temperature"); v.Exists() && v.Type == gjson.Number {
@@ -403,6 +412,11 @@ func ConvertClaudeRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 	}
 	if v := gjson.GetBytes(rawJSON, "max_tokens"); v.Exists() && v.Type == gjson.Number {
 		out, _ = sjson.Set(out, "request.generationConfig.maxOutputTokens", v.Num)
+	}
+	if hasWebSearchTool {
+		out, _ = sjson.Set(out, "model", "gemini-2.5-flash")
+		out, _ = sjson.Set(out, "request.generationConfig.candidateCount", 1)
+		out, _ = sjson.Set(out, "requestType", "web_search")
 	}
 
 	outBytes := []byte(out)
