@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/router-for-me/CLIProxyAPI/v6/internal/auth/claude"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/auth/codex"
 	"github.com/router-for-me/CLIProxyAPI/v6/internal/runtime/geminicli"
 	coreauth "github.com/router-for-me/CLIProxyAPI/v6/sdk/cliproxy/auth"
@@ -166,6 +167,21 @@ func synthesizeFileAuths(ctx *SynthesisContext, fullPath string, data []byte) []
 				if pt := strings.TrimSpace(claims.CodexAuthInfo.ChatgptPlanType); pt != "" {
 					a.Attributes["plan_type"] = pt
 				}
+			}
+		}
+	}
+	// For claude auth files, parse subscription_tier from the JWT id_token and store
+	// it in Metadata so the /v1/claude/limits endpoint can surface it without JWT
+	// re-parsing at request time.
+	if provider == "claude" {
+		if idTokenRaw, ok := metadata["id_token"].(string); ok && strings.TrimSpace(idTokenRaw) != "" {
+			tier, rawClaims := claude.ParseSubscriptionTier(idTokenRaw)
+			if a.Metadata == nil {
+				a.Metadata = make(map[string]any)
+			}
+			a.Metadata["subscription_tier"] = tier
+			if rawClaims != nil {
+				a.Metadata["subscription_claims_raw"] = rawClaims
 			}
 		}
 	}

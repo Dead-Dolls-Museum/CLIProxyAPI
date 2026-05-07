@@ -361,6 +361,7 @@ func (s *Server) setupRoutes() {
 		v1.GET("/responses", openaiResponsesHandlers.ResponsesWebsocket)
 		v1.POST("/responses", openaiResponsesHandlers.Responses)
 		v1.POST("/responses/compact", openaiResponsesHandlers.Compact)
+		v1.GET("/claude/limits", claudeCodeHandlers.ClaudeLimits)
 	}
 
 	// Codex CLI direct route aliases (chatgpt_base_url compatible)
@@ -389,6 +390,7 @@ func (s *Server) setupRoutes() {
 				"POST /v1/chat/completions",
 				"POST /v1/completions",
 				"GET /v1/models",
+				"GET /v1/claude/limits",
 			},
 		})
 	})
