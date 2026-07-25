@@ -303,6 +303,7 @@ func ConvertOpenAIRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 	// tools -> request.tools[].functionDeclarations + request.tools[].googleSearch/codeExecution/urlContext passthrough
 	tools := gjson.GetBytes(rawJSON, "tools")
 	toolResults := tools.Array()
+	hasWebSearchTool := false
 	if tools.IsArray() && len(toolResults) > 0 {
 		functionDeclarations := make([][]byte, 0, len(toolResults))
 		googleSearchNodes := make([][]byte, 0)
@@ -361,6 +362,17 @@ func ConvertOpenAIRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 					functionDeclarations = append(functionDeclarations, fnRawBytes)
 				}
 			}
+			if t.Get("type").String() == "web_search" {
+				hasWebSearchTool = true
+				webSearchToolNode := []byte(`{}`)
+				var errSet error
+				webSearchToolNode, errSet = sjson.SetRawBytes(webSearchToolNode, "googleSearch", []byte(`{}`))
+				if errSet != nil {
+					log.Warnf("Failed to set googleSearch tool for web_search: %v", errSet)
+					continue
+				}
+				googleSearchNodes = append(googleSearchNodes, webSearchToolNode)
+			}
 			if gs := t.Get("google_search"); gs.Exists() {
 				googleToolNode := []byte(`{}`)
 				var errSet error
@@ -409,6 +421,13 @@ func ConvertOpenAIRequestToAntigravity(modelName string, inputRawJSON []byte, _ 
 	}
 
 	out = applyOpenAIToolChoiceToAntigravity(out, rawJSON, functionNameMap)
+
+	if hasWebSearchTool {
+		out, _ = sjson.SetBytes(out, "model", "gemini-2.5-flash")
+		out, _ = sjson.SetBytes(out, "request.generationConfig.candidateCount", 1)
+		out, _ = sjson.SetBytes(out, "requestType", "web_search")
+	}
+
 	return common.AttachDefaultSafetySettings(out, "request.safetySettings")
 }
 

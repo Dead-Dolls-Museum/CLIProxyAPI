@@ -2081,6 +2081,7 @@ func (m *Manager) wrapStreamResult(ctx context.Context, auth *Auth, provider, re
 		}
 		if !failed {
 			m.recordExecutionResult(ctx, Result{AuthID: auth.ID, Provider: provider, Model: resultModel, Success: true}, auth, ephemeralResult)
+			m.observeClaudeHeaders(auth.ID, headers)
 		}
 	}()
 	return &cliproxyexecutor.StreamResult{Headers: headers, Chunks: out}
@@ -3012,6 +3013,7 @@ func (m *Manager) executeMixedOnce(ctx context.Context, providers []string, req 
 			}
 			m.MarkResult(execCtx, result)
 			rewriteForceMappedResponse(&resp, aliasResult)
+			m.observeClaudeHeaders(result.AuthID, resp.Headers)
 			return resp, nil
 		}
 		if authErr != nil {
@@ -5271,6 +5273,26 @@ func nextQuotaCooldown(prevLevel int, disableCooling bool) (time.Duration, int) 
 		return quotaBackoffMax, prevLevel
 	}
 	return cooldown, prevLevel + 1
+}
+
+// observeClaudeHeaders parses Anthropic rate-limit headers from h and, when any are
+// present, stores the resulting ClaudeLimitsSnapshot into the auth entry identified
+// by authID. It is a no-op for non-Claude providers (provider != "claude") and when
+// h contains no recognisable Anthropic rate-limit headers.
+func (m *Manager) observeClaudeHeaders(authID string, h http.Header) {
+	if m == nil || authID == "" || len(h) == 0 {
+		return
+	}
+	snap, ok := ParseClaudeRateLimits(h)
+	if !ok {
+		return
+	}
+	m.mu.Lock()
+	if auth, exists := m.auths[authID]; exists && auth != nil &&
+		strings.EqualFold(strings.TrimSpace(auth.Provider), "claude") {
+		StoreClaudeLimits(auth, snap)
+	}
+	m.mu.Unlock()
 }
 
 // List returns all auth entries currently known by the manager.
