@@ -421,3 +421,26 @@ func assertNoResponseSchemaAliases(t *testing.T, out []byte) {
 		}
 	}
 }
+
+func TestConvertOpenAIRequestToAntigravityWebSearchTool(t *testing.T) {
+	inputJSON := `{
+		"model": "gemini-3-flash",
+		"messages": [{"role": "user", "content": "what's the weather today?"}],
+		"tools": [{"type": "web_search"}]
+	}`
+
+	result := ConvertOpenAIRequestToAntigravity("gemini-3-flash", []byte(inputJSON), false)
+
+	if got := gjson.GetBytes(result, "model").String(); got != "gemini-2.5-flash" {
+		t.Fatalf("model = %q, want gemini-2.5-flash. Output: %s", got, result)
+	}
+	if got := gjson.GetBytes(result, "requestType").String(); got != "web_search" {
+		t.Fatalf("requestType = %q, want web_search. Output: %s", got, result)
+	}
+	if got := gjson.GetBytes(result, "request.generationConfig.candidateCount").Int(); got != 1 {
+		t.Fatalf("candidateCount = %d, want 1. Output: %s", got, result)
+	}
+	if !gjson.GetBytes(result, "request.tools.0.googleSearch").Exists() {
+		t.Fatalf("expected googleSearch tool to be set. Output: %s", result)
+	}
+}

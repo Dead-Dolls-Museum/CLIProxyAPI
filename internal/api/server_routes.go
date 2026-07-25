@@ -82,6 +82,7 @@ func (s *Server) setupRoutes() {
 		v1.POST("/realtime/calls", s.codexLiveHandler.Handle)
 		v1.GET("/realtime/calls/:call_id", s.codexLiveHandler.HandleSideband)
 		v1.GET("/realtime", s.codexLiveHandler.HandleSideband)
+		v1.GET("/claude/limits", claudeCodeHandlers.ClaudeLimits)
 	}
 
 	openaiV1 := s.engine.Group("/openai/v1")
@@ -120,6 +121,7 @@ func (s *Server) setupRoutes() {
 				"POST /v1/chat/completions",
 				"POST /v1/completions",
 				"GET /v1/models",
+				"GET /v1/claude/limits",
 			},
 		})
 	})
