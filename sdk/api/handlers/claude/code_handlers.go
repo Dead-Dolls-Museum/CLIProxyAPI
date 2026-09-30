@@ -33,6 +33,10 @@ import (
 // It holds a pool of clients to interact with the backend service.
 type ClaudeCodeAPIHandler struct {
 	*handlers.BaseAPIHandler
+	// limitsState holds per-handler cache and fetcher state for
+	// ClaudeLimits. Embedding it here keeps parallel test instances
+	// fully isolated from one another.
+	limitsState *claudeLimitsState
 }
 
 // NewClaudeCodeAPIHandler creates a new Claude API handlers instance.
@@ -46,6 +50,7 @@ type ClaudeCodeAPIHandler struct {
 func NewClaudeCodeAPIHandler(apiHandlers *handlers.BaseAPIHandler) *ClaudeCodeAPIHandler {
 	return &ClaudeCodeAPIHandler{
 		BaseAPIHandler: apiHandlers,
+		limitsState:    newClaudeLimitsState(productionProfileFetcher, productionUsageFetcher),
 	}
 }
 

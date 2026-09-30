@@ -81,6 +81,7 @@ func (s *Server) setupRoutes() {
 		v1.POST("/alpha/search", s.codexAlphaSearch)
 		v1.POST("/live", s.codexLiveHandler.Handle)
 		v1.GET("/live/:call_id", s.codexLiveHandler.HandleSideband)
+		v1.GET("/claude/limits", claudeCodeHandlers.ClaudeLimits)
 	}
 
 	realtimeAuth := realtimeAuthMiddleware(s.accessManager, s.codexLiveHandler)
@@ -136,6 +137,7 @@ func (s *Server) setupRoutes() {
 				"POST /v1/chat/completions",
 				"POST /v1/completions",
 				"GET /v1/models",
+				"GET /v1/claude/limits",
 			},
 		})
 	})
