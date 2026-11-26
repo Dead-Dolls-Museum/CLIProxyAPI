@@ -55,10 +55,9 @@ type claudeLimitsQuota struct {
 }
 
 // claudeLimitsCredential is one element in the /v1/claude/limits response.
+// The endpoint is reachable with any client API key, so it deliberately omits
+// account identity (auth id, email, display name) and raw upstream errors.
 type claudeLimitsCredential struct {
-	AuthID             string                         `json:"auth_id"`
-	Email              string                         `json:"email,omitempty"`
-	DisplayName        string                         `json:"display_name,omitempty"`
 	Plan               string                         `json:"plan"`
 	RateLimitTier      string                         `json:"rate_limit_tier,omitempty"`
 	SubscriptionStatus string                         `json:"subscription_status,omitempty"`
@@ -89,6 +88,9 @@ const usageCacheTTL = 60 * time.Second
 // profileFetchTimeout is the total time budget for the parallel profile+usage
 // fetch step.
 const profileFetchTimeout = 8 * time.Second
+
+// fetchErrorUnavailable is the only fetch_errors value exposed to clients.
+const fetchErrorUnavailable = "unavailable"
 
 // --------------------------------------------------------------------------
 // Fetcher interfaces
@@ -251,6 +253,7 @@ func (s *claudeLimitsState) fetchBothParallel(
 
 		token := claudeAccessToken(a)
 		if token == "" {
+			log.WithField("auth_id", a.ID).Debug("claude limits: no access token in metadata")
 			noTok := profileCacheEntry{lastErr: "no access token in metadata"}
 			noTokU := usageCacheEntry{lastErr: "no access token in metadata"}
 			profiles[a.ID] = noTok
@@ -349,29 +352,10 @@ func claudeAccessToken(a *coreauth.Auth) string {
 // --------------------------------------------------------------------------
 
 func buildCredential(a *coreauth.Auth, profile profileCacheEntry, usage usageCacheEntry) claudeLimitsCredential {
-	cred := claudeLimitsCredential{
-		AuthID: a.ID,
-		Plan:   "unknown",
-	}
+	cred := claudeLimitsCredential{Plan: "unknown"}
 
-	// Extract fields from metadata fallback first.
-	if a.Metadata != nil {
-		if v, ok := a.Metadata["email"].(string); ok {
-			cred.Email = strings.TrimSpace(v)
-		}
-		if v, ok := a.Metadata["display_name"].(string); ok && v != "" {
-			cred.DisplayName = strings.TrimSpace(v)
-		}
-	}
-
-	// Override with live profile data when available.
+	// Use live profile data when available.
 	if profile.raw != nil {
-		if v := claudeauth.ExtractEmail(profile.raw); v != "" {
-			cred.Email = v
-		}
-		if v := claudeauth.ExtractDisplayName(profile.raw); v != "" {
-			cred.DisplayName = v
-		}
 		if v := claudeauth.ExtractPlan(profile.raw); v != "" {
 			cred.Plan = v
 		}
@@ -414,13 +398,14 @@ func buildCredential(a *coreauth.Auth, profile profileCacheEntry, usage usageCac
 		cred.Quota.NextRecoverAt = &t
 	}
 
-	// Populate fetch_errors only when at least one fetch failed.
+	// Populate fetch_errors only when at least one fetch failed. Details stay in
+	// the server debug log; clients only learn which source was unavailable.
 	errs := map[string]string{}
 	if profile.lastErr != "" {
-		errs["profile"] = profile.lastErr
+		errs["profile"] = fetchErrorUnavailable
 	}
 	if usage.lastErr != "" {
-		errs["usage"] = usage.lastErr
+		errs["usage"] = fetchErrorUnavailable
 	}
 	if len(errs) > 0 {
 		cred.FetchErrors = errs

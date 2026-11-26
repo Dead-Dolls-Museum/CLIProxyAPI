@@ -150,12 +150,6 @@ func TestClaudeLimits_PlanFromProfile(t *testing.T) {
 	if cred.SubscriptionStatus != "active" {
 		t.Errorf("subscription_status = %q, want active", cred.SubscriptionStatus)
 	}
-	if cred.Email != "u@example.com" {
-		t.Errorf("email = %q, want u@example.com", cred.Email)
-	}
-	if cred.DisplayName != "Vlad" {
-		t.Errorf("display_name = %q, want Vlad", cred.DisplayName)
-	}
 	if cred.FetchErrors != nil {
 		t.Errorf("fetch_errors: expected nil on success, got %v", cred.FetchErrors)
 	}
@@ -292,8 +286,8 @@ func TestClaudeLimits_ProfileFetchError(t *testing.T) {
 	if cred.FetchErrors == nil {
 		t.Fatal("fetch_errors: expected non-nil on profile error")
 	}
-	if cred.FetchErrors["profile"] == "" {
-		t.Error("fetch_errors.profile: expected non-empty")
+	if got := cred.FetchErrors["profile"]; got != fetchErrorUnavailable {
+		t.Errorf("fetch_errors.profile = %q, want generic %q", got, fetchErrorUnavailable)
 	}
 	// Usage succeeded so usage key should not be present.
 	if _, ok := cred.FetchErrors["usage"]; ok {
@@ -324,8 +318,8 @@ func TestClaudeLimits_UsageFetchError(t *testing.T) {
 	if cred.FetchErrors == nil {
 		t.Fatal("fetch_errors: expected non-nil on usage error")
 	}
-	if cred.FetchErrors["usage"] == "" {
-		t.Error("fetch_errors.usage: expected non-empty")
+	if got := cred.FetchErrors["usage"]; got != fetchErrorUnavailable {
+		t.Errorf("fetch_errors.usage = %q, want generic %q", got, fetchErrorUnavailable)
 	}
 	if _, ok := cred.FetchErrors["profile"]; ok {
 		t.Error("fetch_errors.profile: should be absent when profile succeeded")
